@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tedana_group_stats"
+description = "Aggregate tedana multi-echo fMRI outputs across a BIDS-derivatives tree into a group QC report"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "LGPL-2.1-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Eneko Uruñuela", email = "enekouru@gmail.com" }]
+keywords = ["tedana", "fMRI", "multi-echo", "neuroimaging", "QC", "BIDS"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["version"]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "plotly>=5.18",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "ruff>=0.6",
+    "pyright>=1.1.380",
+    "pre-commit>=3.7",
+]
+
+[project.scripts]
+tedana-group-stats = "tedana_group_stats.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/eurunuela/tedana_group_stats"
+Issues = "https://github.com/eurunuela/tedana_group_stats/issues"
+
+[tool.hatch.version]
+path = "src/tedana_group_stats/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tedana_group_stats"]
+
+[tool.ruff]
+line-length = 99
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PTH", "RUF"]
+ignore = ["E501"]  # line length is enforced by the formatter, not the linter
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "SIM"]  # tests are allowed to be blunt
+
+[tool.ruff.lint.isort]
+known-first-party = ["tedana_group_stats"]
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false  # pandas/plotly stubs are partial; don't fight it
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
