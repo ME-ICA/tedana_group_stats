@@ -11,10 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-      - run: uv pip install --system -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pyright
-      - run: pytest -q
+      - run: uv venv --python 3.12
+      - run: uv pip install -e ".[dev]"
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync pyright
+      - run: uv run --no-sync pytest -q
