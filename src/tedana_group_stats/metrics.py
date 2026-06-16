@@ -86,6 +86,25 @@ def _blank_summary(run: TedanaRun, status: str, error: str | None = None) -> Run
     )
 
 
+def _resolve(directory: Path, name: str) -> Path | None:
+    """Locate a registry-referenced output, tolerating BIDS prefix drift.
+
+    tedana records bare-prefix names (``sub-04_desc-..``); a downstream BIDS rename
+    can insert entities into the on-disk files (``sub-04_task-rest_desc-..``). When the
+    recorded name is missing, fall back to the descriptor tail, accepting the match only
+    when exactly one file qualifies (so we never guess between ambiguous candidates).
+    """
+    direct = directory / name
+    if direct.is_file():
+        return direct
+    _, sep, tail = name.partition("_desc-")
+    if sep:
+        matches = sorted(directory.glob(f"*_desc-{tail}"))
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
 def _to_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -152,8 +171,11 @@ def _fill_crosscomponent_stats(
     name = registry.get(ICA_CROSSCOMP_KEY)
     if not name:
         return
+    path = _resolve(directory, name)
+    if path is None:
+        return
     try:
-        data = json.loads((directory / name).read_text())
+        data = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
         return
     summary["kappa_elbow"] = _to_float(_first_present(data, _KAPPA_ELBOW_KEYS))
@@ -190,8 +212,12 @@ def summarize_run(run: TedanaRun) -> RunSummary:
     if not tsv_name:
         return _blank_summary(run, "failed", f"registry missing key {ICA_METRICS_TSV_KEY!r}")
 
+    tsv_path = _resolve(run.directory, tsv_name)
+    if tsv_path is None:
+        return _blank_summary(run, "failed", f"metrics tsv not found: {tsv_name}")
+
     try:
-        table = pd.read_csv(run.directory / tsv_name, sep="\t")
+        table = pd.read_csv(tsv_path, sep="\t")
     except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         return _blank_summary(run, "failed", f"unreadable metrics tsv: {exc}")
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pandas as pd
 
 from tedana_group_stats.discovery import TedanaRun, discover_runs
 from tedana_group_stats.metrics import summarize_run
@@ -40,3 +43,42 @@ def test_missing_crosscomponent_json(derivatives: Path) -> None:
     assert summary["n_components"] == 3
     assert summary["kappa_elbow"] is None
     assert summary["rho_elbow"] is None
+
+
+def test_bids_renamed_files_resolve_despite_registry_prefix_drift(tmp_path: Path) -> None:
+    """Registry records a bare tedana prefix; on-disk files gained a BIDS entity.
+
+    Mirrors ds000258, where files were renamed to add ``task-rest`` after tedana ran,
+    so ``ICA metrics tsv`` / cross-component names in the registry no longer match disk.
+    """
+    func = tmp_path / "sub-06" / "func"
+    func.mkdir(parents=True)
+    registry_name = "sub-06_task-rest_desc-tedana_registry.json"
+    # Registry references the bare prefix (no task entity).
+    (func / registry_name).write_text(
+        json.dumps(
+            {
+                "ICA metrics tsv": "sub-06_desc-tedana_metrics.tsv",
+                "ICA cross component metrics json": "sub-06_desc-ICACrossComponent_metrics.json",
+            }
+        )
+    )
+    # Files on disk carry the extra task-rest entity.
+    pd.DataFrame(
+        {
+            "kappa": [80.0, 25.0],
+            "rho": [10.0, 30.0],
+            "variance explained": [20.0, 8.0],
+            "classification": ["accepted", "rejected"],
+        }
+    ).to_csv(func / "sub-06_task-rest_desc-tedana_metrics.tsv", sep="\t", index=False)
+    (func / "sub-06_task-rest_desc-ICACrossComponent_metrics.json").write_text(
+        json.dumps({"kappa_elbow_kundu": 30.0, "rho_elbow_kundu": 18.0})
+    )
+
+    summary = summarize_run(_run_for(tmp_path, "06"))
+    assert summary["status"] == "ok"
+    assert summary["n_components"] == 2
+    assert summary["n_accepted"] == 1
+    assert summary["kappa_elbow"] == 30.0
+    assert summary["rho_elbow"] == 18.0
