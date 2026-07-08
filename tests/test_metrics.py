@@ -82,3 +82,40 @@ def test_bids_renamed_files_resolve_despite_registry_prefix_drift(tmp_path: Path
     assert summary["n_accepted"] == 1
     assert summary["kappa_elbow"] == 30.0
     assert summary["rho_elbow"] == 18.0
+
+
+def test_empty_prefix_registry_names_resolve_despite_drift(tmp_path: Path) -> None:
+    """Registry records empty-prefix ``desc-..`` names; on-disk files gained a BIDS entity.
+
+    tedana can emit prefix-less outputs (``desc-tedana_metrics.tsv``); after a rename those
+    drift to ``sub-07_task-rest_desc-..`` on disk. The resolver must match on the ``desc-``
+    tail even without a leading underscore.
+    """
+    func = tmp_path / "sub-07" / "func"
+    func.mkdir(parents=True)
+    (func / "sub-07_task-rest_desc-tedana_registry.json").write_text(
+        json.dumps(
+            {
+                "ICA metrics tsv": "desc-tedana_metrics.tsv",
+                "ICA cross component metrics json": "desc-ICACrossComponent_metrics.json",
+            }
+        )
+    )
+    pd.DataFrame(
+        {
+            "kappa": [80.0, 25.0],
+            "rho": [10.0, 30.0],
+            "variance explained": [20.0, 8.0],
+            "classification": ["accepted", "rejected"],
+        }
+    ).to_csv(func / "sub-07_task-rest_desc-tedana_metrics.tsv", sep="\t", index=False)
+    (func / "sub-07_task-rest_desc-ICACrossComponent_metrics.json").write_text(
+        json.dumps({"kappa_elbow_kundu": 30.0, "rho_elbow_kundu": 18.0})
+    )
+
+    summary = summarize_run(_run_for(tmp_path, "07"))
+    assert summary["status"] == "ok"
+    assert summary["n_components"] == 2
+    assert summary["n_accepted"] == 1
+    assert summary["kappa_elbow"] == 30.0
+    assert summary["rho_elbow"] == 18.0

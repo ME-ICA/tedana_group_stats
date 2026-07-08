@@ -89,17 +89,18 @@ def _blank_summary(run: TedanaRun, status: str, error: str | None = None) -> Run
 def _resolve(directory: Path, name: str) -> Path | None:
     """Locate a registry-referenced output, tolerating BIDS prefix drift.
 
-    tedana records bare-prefix names (``sub-04_desc-..``); a downstream BIDS rename
-    can insert entities into the on-disk files (``sub-04_task-rest_desc-..``). When the
-    recorded name is missing, fall back to the descriptor tail, accepting the match only
-    when exactly one file qualifies (so we never guess between ambiguous candidates).
+    tedana records bare-prefix names (``sub-04_desc-..`` or empty-prefix ``desc-..``); a
+    downstream BIDS rename can insert entities into the on-disk files
+    (``sub-04_task-rest_desc-..``). When the recorded name is missing, fall back to the
+    ``desc-`` tail, accepting the match only when exactly one file qualifies (so we never
+    guess between ambiguous candidates).
     """
     direct = directory / name
     if direct.is_file():
         return direct
-    _, sep, tail = name.partition("_desc-")
+    _, sep, tail = name.partition("desc-")
     if sep:
-        matches = sorted(directory.glob(f"*_desc-{tail}"))
+        matches = sorted(directory.glob(f"*desc-{tail}"))
         if len(matches) == 1:
             return matches[0]
     return None
@@ -214,7 +215,9 @@ def summarize_run(run: TedanaRun) -> RunSummary:
 
     tsv_path = _resolve(run.directory, tsv_name)
     if tsv_path is None:
-        return _blank_summary(run, "failed", f"metrics tsv not found: {tsv_name}")
+        return _blank_summary(
+            run, "failed", f"metrics tsv unresolved (missing or ambiguous): {tsv_name}"
+        )
 
     try:
         table = pd.read_csv(tsv_path, sep="\t")

@@ -14,7 +14,7 @@ does **not** import tedana or touch any NIfTI, so it is fast and lightweight.
 
 If a derivatives tree was BIDS-renamed after tedana ran (e.g. files gained a `task-`
 entity that the registry's recorded filenames lack), the scanner still finds the metrics
-by matching on the `_desc-…` suffix, accepting a match only when it is unambiguous. This
+by matching on the `desc-…` descriptor tail, accepting a match only when it is unambiguous. This
 means runs load correctly even when the registry's internal paths drift from disk.
 
 ## Install
