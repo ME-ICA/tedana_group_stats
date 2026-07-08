@@ -147,7 +147,7 @@ def _fill_component_stats(summary: RunSummary, table: pd.DataFrame) -> None:
     classification = (
         table["classification"].astype(str)
         if "classification" in table.columns
-        else pd.Series([], dtype=str)
+        else pd.Series("", index=table.index, dtype=str)
     )
     n_accepted = int((classification == "accepted").sum())
     n_rejected = int((classification == "rejected").sum())
