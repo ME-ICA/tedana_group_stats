@@ -45,11 +45,26 @@ def test_missing_crosscomponent_json(derivatives: Path) -> None:
     assert summary["rho_elbow"] is None
 
 
-def test_bids_renamed_files_resolve_despite_registry_prefix_drift(tmp_path: Path) -> None:
-    """Registry records a bare tedana prefix; on-disk files gained a BIDS entity.
+def test_registryless_run_summarizes_component_stats(derivatives: Path) -> None:
+    """A run with only a metrics tsv (no registry) still yields component metrics."""
+    run = _run_for(derivatives, "06")
+    assert run.registry is None
+    summary = summarize_run(run)
+    assert summary["status"] == "ok"
+    assert summary["n_components"] == 3
+    assert summary["n_accepted"] == 2
+    assert summary["median_kappa"] == 58.0
+    assert summary["kappa_elbow"] is None  # crosscomponent json is absent in this fixture
+    assert summary["rho_elbow"] is None
 
-    Mirrors ds000258, where files were renamed to add ``task-rest`` after tedana ran,
-    so ``ICA metrics tsv`` / cross-component names in the registry no longer match disk.
+
+def test_bids_renamed_files_resolve_despite_registry_prefix_drift(tmp_path: Path) -> None:
+    """Registry records a bare tedana prefix; on-disk cross-component JSON gained a BIDS entity.
+
+    Mirrors ds000258, where files were renamed to add ``task-rest`` after tedana ran, so the
+    cross-component name recorded in the registry no longer matches disk. The metrics tsv is
+    read directly off disk now, so it needs no resolution; the ``_resolve`` tail-match still
+    matters for the registry-recorded cross-component JSON.
     """
     func = tmp_path / "sub-06" / "func"
     func.mkdir(parents=True)
@@ -87,9 +102,9 @@ def test_bids_renamed_files_resolve_despite_registry_prefix_drift(tmp_path: Path
 def test_empty_prefix_registry_names_resolve_despite_drift(tmp_path: Path) -> None:
     """Registry records empty-prefix ``desc-..`` names; on-disk files gained a BIDS entity.
 
-    tedana can emit prefix-less outputs (``desc-tedana_metrics.tsv``); after a rename those
-    drift to ``sub-07_task-rest_desc-..`` on disk. The resolver must match on the ``desc-``
-    tail even without a leading underscore.
+    tedana can emit prefix-less outputs (``desc-ICACrossComponent_metrics.json``); after a
+    rename those drift to ``sub-07_task-rest_desc-..`` on disk. The cross-component resolver
+    must match on the ``desc-`` tail even without a leading underscore.
     """
     func = tmp_path / "sub-07" / "func"
     func.mkdir(parents=True)

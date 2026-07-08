@@ -15,9 +15,8 @@ import pandas as pd
 
 from tedana_group_stats.discovery import TedanaRun
 
-# Registry keys are tedana's stable public contract; see
+# Registry key is tedana's stable public contract; see
 # tedana/resources/config/outputs.json. Centralized so a future rename is one edit.
-ICA_METRICS_TSV_KEY = "ICA metrics tsv"
 ICA_CROSSCOMP_KEY = "ICA cross component metrics json"
 
 # Cross-component JSON keys are decision-tree dependent, so every one is optional.
@@ -166,13 +165,26 @@ def _fill_component_stats(summary: RunSummary, table: pd.DataFrame) -> None:
     summary["max_rho"] = _stat(table, "rho", "max")
 
 
+def _find_crosscomponent(registry: dict[str, Any] | None, metrics_tsv: Path) -> Path | None:
+    """Locate the ICA cross-component metrics JSON for a run.
+
+    Prefer the registry-recorded name (honoring prefix-drift resolution). Without a
+    registry, derive the sibling name from the metrics tsv's on-disk prefix, so a run
+    is paired with its own JSON even when several runs share a directory.
+    """
+    directory = metrics_tsv.parent
+    if registry is not None:
+        name = registry.get(ICA_CROSSCOMP_KEY)
+        return _resolve(directory, name) if name else None
+    prefix = metrics_tsv.name.split("desc-", 1)[0]
+    candidate = directory / f"{prefix}desc-ICACrossComponent_metrics.json"
+    return candidate if candidate.is_file() else None
+
+
 def _fill_crosscomponent_stats(
-    summary: RunSummary, registry: dict[str, Any], directory: Path
+    summary: RunSummary, registry: dict[str, Any] | None, metrics_tsv: Path
 ) -> None:
-    name = registry.get(ICA_CROSSCOMP_KEY)
-    if not name:
-        return
-    path = _resolve(directory, name)
+    path = _find_crosscomponent(registry, metrics_tsv)
     if path is None:
         return
     try:
@@ -202,30 +214,26 @@ def _read_tedana_version(directory: Path) -> str | None:
     return None
 
 
+def _load_registry(run: TedanaRun) -> dict[str, Any] | None:
+    """Load the optional registry JSON; a missing or unreadable one is not fatal."""
+    if run.registry is None:
+        return None
+    try:
+        data = json.loads(run.registry.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def summarize_run(run: TedanaRun) -> RunSummary:
     """Reduce a single tedana run to a summary row, degrading gracefully on failure."""
     try:
-        registry = json.loads(run.registry.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        return _blank_summary(run, "failed", f"unreadable registry: {exc}")
-
-    tsv_name = registry.get(ICA_METRICS_TSV_KEY)
-    if not tsv_name:
-        return _blank_summary(run, "failed", f"registry missing key {ICA_METRICS_TSV_KEY!r}")
-
-    tsv_path = _resolve(run.directory, tsv_name)
-    if tsv_path is None:
-        return _blank_summary(
-            run, "failed", f"metrics tsv unresolved (missing or ambiguous): {tsv_name}"
-        )
-
-    try:
-        table = pd.read_csv(tsv_path, sep="\t")
+        table = pd.read_csv(run.metrics_tsv, sep="\t")
     except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         return _blank_summary(run, "failed", f"unreadable metrics tsv: {exc}")
 
     summary = _blank_summary(run, "ok")
     summary["tedana_version"] = _read_tedana_version(run.directory)
     _fill_component_stats(summary, table)
-    _fill_crosscomponent_stats(summary, registry, run.directory)
+    _fill_crosscomponent_stats(summary, _load_registry(run), run.metrics_tsv)
     return summary

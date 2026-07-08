@@ -1,9 +1,12 @@
 """Discover tedana output directories in a BIDS-derivatives tree.
 
-A completed tedana run always writes a ``{prefix}_desc-tedana_registry.json`` file
-(bare ``desc-tedana_registry.json`` when the prefix is empty). That registry is the
-reliable, unique marker we glob for. BIDS entities are parsed from the full path so
-discovery works whether they live in the filename prefix or the directory hierarchy.
+Every tedana run writes a ``{prefix}_desc-tedana_metrics.tsv`` (bare
+``desc-tedana_metrics.tsv`` when the prefix is empty) holding the component metrics
+table. That TSV is the reliable, universal marker we glob for — it exists even for
+older or minimal-output runs that never wrote a ``desc-tedana_registry.json``. The
+registry, when present, is optional enrichment (see ``metrics``). BIDS entities are
+parsed from the full path so discovery works whether they live in the filename prefix
+or the directory hierarchy.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+METRICS_GLOB = "*desc-tedana_metrics.tsv"
 REGISTRY_GLOB = "*desc-tedana_registry.json"
 
 # Entity name -> regex capturing its value, and the BIDS key used to render run_id.
@@ -26,9 +30,14 @@ _ENTITIES: tuple[tuple[str, str, re.Pattern[str]], ...] = (
 
 @dataclass(frozen=True)
 class TedanaRun:
-    """A discovered tedana output, identified by its registry file."""
+    """A discovered tedana output, identified by its metrics TSV.
 
-    registry: Path
+    ``registry`` is the run's ``desc-tedana_registry.json`` when it exists, else
+    ``None`` — it is optional enrichment, not required to summarize a run.
+    """
+
+    metrics_tsv: Path
+    registry: Path | None
     subject: str | None
     session: str | None
     task: str | None
@@ -38,7 +47,7 @@ class TedanaRun:
     @property
     def directory(self) -> Path:
         """Directory containing the tedana outputs."""
-        return self.registry.parent
+        return self.metrics_tsv.parent
 
     @property
     def run_id(self) -> str:
@@ -65,21 +74,26 @@ def discover_runs(root: str | Path) -> list[TedanaRun]:
     Parameters
     ----------
     root : str or pathlib.Path
-        Directory searched recursively for tedana registry files.
+        Directory searched recursively for tedana metrics TSV files.
 
     Returns
     -------
     list of TedanaRun
-        One entry per registry found, sorted by path and de-duplicated by resolved
+        One entry per metrics TSV found, sorted by path and de-duplicated by resolved
         path for deterministic output.
     """
     root = Path(root)
     seen: set[Path] = set()
     runs: list[TedanaRun] = []
-    for registry in sorted(root.rglob(REGISTRY_GLOB)):
-        resolved = registry.resolve()
+    for tsv in sorted(root.rglob(METRICS_GLOB)):
+        resolved = tsv.resolve()
         if resolved in seen:
             continue
         seen.add(resolved)
-        runs.append(TedanaRun(registry=registry, **_parse_entities(registry)))
+        # Pair with the sibling registry sharing this run's on-disk prefix — dirs can
+        # hold several runs (multiple tasks/runs per session), so "one per dir" won't do.
+        prefix = tsv.name.split("desc-", 1)[0]
+        candidate = tsv.parent / f"{prefix}desc-tedana_registry.json"
+        registry = candidate if candidate.is_file() else None
+        runs.append(TedanaRun(metrics_tsv=tsv, registry=registry, **_parse_entities(tsv)))
     return runs

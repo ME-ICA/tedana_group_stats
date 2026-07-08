@@ -9,13 +9,18 @@ metrics (component counts, accepted fraction, kappa/rho, retained variance, elbo
 thresholds), flags statistical outliers with a robust modified z-score, and writes one
 HTML file with a styled summary table and three interactive Plotly charts.
 
-It reads only tedana's `*_desc-tedana_registry.json` and the TSV/JSON it points to — it
-does **not** import tedana or touch any NIfTI, so it is fast and lightweight.
+It anchors on tedana's `*_desc-tedana_metrics.tsv` — the one output every run writes,
+including older or minimal-output runs — and reads only that TSV plus, when present, the
+run's `*_desc-tedana_registry.json` and cross-component JSON for a few extra metrics
+(elbow thresholds, rejected-on-accepted variance). It does **not** import tedana or touch
+any NIfTI, so it is fast and lightweight, and it reports **every** run rather than only
+those that happen to have a registry.
 
 If a derivatives tree was BIDS-renamed after tedana ran (e.g. files gained a `task-`
-entity that the registry's recorded filenames lack), the scanner still finds the metrics
-by matching on the `desc-…` descriptor tail, accepting a match only when it is unambiguous. This
-means runs load correctly even when the registry's internal paths drift from disk.
+entity that the registry's recorded filenames lack), the scanner still resolves the
+cross-component JSON by matching on the `desc-…` descriptor tail, accepting a match only
+when it is unambiguous — so enrichment keeps working even when the registry's internal
+paths drift from disk.
 
 ## Install
 
