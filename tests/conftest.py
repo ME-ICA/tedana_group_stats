@@ -49,8 +49,15 @@ def _write_run(
                 "kappa": kappas,
                 "rho": rhos,
                 "variance explained": var_exps,
+                # dice/signal-noise are constant per class so the accepted-only medians
+                # are deterministic: accepted rows get the higher values.
+                "dice_FT2": [0.6 if c == "accepted" else 0.1 for c in classifications],
+                "signal-noise_t": [8.0 if c == "accepted" else -2.0 for c in classifications],
                 "classification": classifications,
-                "classification_tags": ["" for _ in classifications],
+                "classification_tags": [
+                    "Likely BOLD" if c == "accepted" else "Unlikely BOLD, Low variance"
+                    for c in classifications
+                ],
             }
         ).to_csv(metrics_path, sep="\t", index=False)
 

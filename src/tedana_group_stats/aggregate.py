@@ -18,6 +18,8 @@ OUTLIER_METRICS: tuple[str, ...] = (
     "median_kappa",
     "variance_explained_accepted",
     "variance_explained_rejected",  # tsv-derived denoising signal; present without a registry
+    "rejected_variance_fraction",
+    "kappa_rho_ratio",
     "var_exp_rejected_on_accepted",
 )
 DEFAULT_THRESHOLD = 3.5

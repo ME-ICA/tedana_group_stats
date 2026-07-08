@@ -34,8 +34,14 @@ _TABLE_COLUMNS = [
     "accepted_fraction",
     "variance_explained_accepted",
     "variance_explained_rejected",
+    "rejected_variance_fraction",
     "median_kappa",
+    "max_kappa",
     "median_rho",
+    "max_rho",
+    "kappa_rho_ratio",
+    "median_dice_ft2",
+    "median_signal_noise_t",
     "kappa_elbow",
     "rho_elbow",
     "var_exp_rejected_on_accepted",
@@ -43,6 +49,8 @@ _TABLE_COLUMNS = [
     "is_outlier",
 ]
 _CATEGORY_COLORS = {"ok": "#1f77b4", "outlier": "#d62728", "failed": "#7f7f7f"}
+# Above this run count, per-run bars become an unreadable strip; show a distribution instead.
+_MAX_PER_RUN_BARS = 40
 
 
 def _category(row: pd.Series) -> str:
@@ -166,6 +174,90 @@ def _box_accepted_fraction(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def _bar_variance(df: pd.DataFrame) -> go.Figure:
+    ordered = df.sort_values("rejected_variance_fraction", na_position="first")
+    fig = go.Figure()
+    for column, color, label in (
+        ("variance_explained_accepted", "#2ca02c", "accepted"),
+        ("variance_explained_rejected", "#d62728", "rejected"),
+    ):
+        if column in ordered.columns:
+            fig.add_trace(
+                go.Bar(x=ordered["run_id"], y=ordered[column], name=label, marker_color=color)
+            )
+    fig.update_layout(
+        barmode="stack",
+        title="Variance explained per run (accepted vs rejected)",
+        xaxis_title="run",
+        yaxis_title="variance explained (%)",
+        template="plotly_white",
+    )
+    fig.update_xaxes(tickangle=45)
+    return fig
+
+
+def _histogram(df: pd.DataFrame, column: str, title: str, xaxis_title: str) -> go.Figure:
+    """Distribution of one per-run metric — scales to any run count, unlike per-run bars."""
+    series = df[column] if column in df.columns else pd.Series(dtype=float)
+    values = cast("pd.Series", pd.to_numeric(series, errors="coerce")).dropna()
+    fig = go.Figure(go.Histogram(x=values, marker_color=_CATEGORY_COLORS["ok"]))
+    fig.update_layout(
+        title=title,
+        xaxis_title=xaxis_title,
+        yaxis_title="runs",
+        template="plotly_white",
+        bargap=0.05,
+    )
+    return fig
+
+
+def _bar_rejection_reasons(df: pd.DataFrame) -> go.Figure:
+    """Group-wide classification_tags frequency, stacked by classification bucket.
+
+    Splitting each tag by bucket keeps accepted tags (e.g. "Likely BOLD") from
+    burying the tags that actually drive rejection ("Low variance", ...).
+    """
+    per_bucket: dict[str, dict[str, int]] = {}
+    entries = df["tag_counts"] if "tag_counts" in df.columns else pd.Series(dtype=object)
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        for tag, buckets in entry.items():
+            dest = per_bucket.setdefault(tag, {})
+            for bucket, count in buckets.items():
+                dest[bucket] = dest.get(bucket, 0) + count
+
+    fig = go.Figure()
+    if not per_bucket:
+        fig.update_layout(
+            title="Component classification tags across runs (no tags recorded)",
+            template="plotly_white",
+        )
+        return fig
+
+    tags = sorted(per_bucket, key=lambda t: sum(per_bucket[t].values()), reverse=True)
+    buckets = sorted({b for counts in per_bucket.values() for b in counts})
+    bucket_colors = {"accepted": "#2ca02c", "rejected": "#d62728", "ignored": "#7f7f7f"}
+    for bucket in buckets:
+        fig.add_trace(
+            go.Bar(
+                x=tags,
+                y=[per_bucket[tag].get(bucket, 0) for tag in tags],
+                name=bucket,
+                marker_color=bucket_colors.get(bucket, "#9467bd"),
+            )
+        )
+    fig.update_layout(
+        barmode="stack",
+        title="Component classification tags across runs (why components are rejected)",
+        xaxis_title="tag",
+        yaxis_title="components",
+        template="plotly_white",
+    )
+    fig.update_xaxes(tickangle=45)
+    return fig
+
+
 def _fmt(value: Any) -> str:
     if value is None:
         return "n/a"
@@ -236,7 +328,28 @@ def write_report(df: pd.DataFrame, out_path: str | Path, offline: bool = False) 
     work["_category"] = work.apply(_category, axis=1)
     work["_marker_size"] = _marker_sizes(work)
 
-    figures = [_scatter_kappa_rho(work), _bar_components(work), _box_accepted_fraction(work)]
+    # Per-run bars are readable for a small study but collapse into a strip at scale;
+    # past the threshold, swap them for distributions that scale to any run count.
+    if len(work) > _MAX_PER_RUN_BARS:
+        component_fig = _histogram(
+            work, "n_components", "Component count distribution", "components"
+        )
+        variance_fig = _histogram(
+            work,
+            "rejected_variance_fraction",
+            "Rejected variance fraction distribution (share of modeled variance that is noise)",
+            "rejected variance fraction",
+        )
+    else:
+        component_fig = _bar_components(work)
+        variance_fig = _bar_variance(work)
+    figures = [
+        _scatter_kappa_rho(work),
+        component_fig,
+        variance_fig,
+        _box_accepted_fraction(work),
+        _bar_rejection_reasons(work),
+    ]
     first_js: bool | str = True if offline else "cdn"
     divs = [_fig_to_div(fig, first_js if i == 0 else False) for i, fig in enumerate(figures)]
 

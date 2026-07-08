@@ -25,6 +25,9 @@ _RHO_ELBOW_KEYS = ("rho_elbow_kundu", "rho_elbow_liberal", "rho_elbow")
 _VAR_EXP_REJECTED_KEY = "total_var_exp_rejected_components_on_accepted"
 
 _VAREX_COL = "variance explained"
+_DICE_FT2_COL = "dice_FT2"
+_SIGNAL_NOISE_T_COL = "signal-noise_t"
+_TAGS_COL = "classification_tags"
 
 
 class RunSummary(TypedDict):
@@ -47,13 +50,20 @@ class RunSummary(TypedDict):
     accepted_fraction: float | None
     variance_explained_accepted: float | None
     variance_explained_rejected: float | None
+    total_variance_explained: float | None
+    rejected_variance_fraction: float | None
     median_kappa: float | None
     max_kappa: float | None
     median_rho: float | None
     max_rho: float | None
+    kappa_rho_ratio: float | None
+    median_dice_ft2: float | None
+    median_signal_noise_t: float | None
     kappa_elbow: float | None
     rho_elbow: float | None
     var_exp_rejected_on_accepted: float | None
+    # {tag: {classification: count}}, e.g. {"Low variance": {"rejected": 14}}.
+    tag_counts: dict[str, dict[str, int]] | None
 
 
 def _blank_summary(run: TedanaRun, status: str, error: str | None = None) -> RunSummary:
@@ -75,13 +85,19 @@ def _blank_summary(run: TedanaRun, status: str, error: str | None = None) -> Run
         accepted_fraction=None,
         variance_explained_accepted=None,
         variance_explained_rejected=None,
+        total_variance_explained=None,
+        rejected_variance_fraction=None,
         median_kappa=None,
         max_kappa=None,
         median_rho=None,
         max_rho=None,
+        kappa_rho_ratio=None,
+        median_dice_ft2=None,
+        median_signal_noise_t=None,
         kappa_elbow=None,
         rho_elbow=None,
         var_exp_rejected_on_accepted=None,
+        tag_counts=None,
     )
 
 
@@ -141,13 +157,53 @@ def _sum_varex(table: pd.DataFrame, mask: pd.Series) -> float | None:
     return float(cast("float", _numeric(table.loc[mask, _VAREX_COL]).sum()))
 
 
+def _masked_median(table: pd.DataFrame, col: str, mask: pd.Series) -> float | None:
+    """Median of a numeric column over the masked rows; None if column/values absent."""
+    if col not in table.columns:
+        return None
+    series = _numeric(table.loc[mask, col]).dropna()
+    if series.empty:
+        return None
+    return float(series.median())
+
+
+def _ratio(numerator: float | None, denominator: float | None) -> float | None:
+    """numerator / denominator, guarding None operands and a zero denominator."""
+    if numerator is None or denominator is None or denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def _tag_counts(table: pd.DataFrame) -> dict[str, dict[str, int]] | None:
+    """Count each ``classification_tags`` entry, keyed by classification bucket.
+
+    Tags are comma-joined free-form strings (decision-tree dependent), so parse
+    generically: split on comma, strip, drop blanks. Returns None when the column is
+    absent, {} when present but empty.
+    """
+    if _TAGS_COL not in table.columns:
+        return None
+    classes = (
+        table["classification"].astype(str)
+        if "classification" in table.columns
+        else pd.Series(["unknown"] * len(table), index=table.index)
+    )
+    counts: dict[str, dict[str, int]] = {}
+    for raw_tags, cls in zip(table[_TAGS_COL].fillna(""), classes, strict=False):
+        for tag in (t.strip() for t in str(raw_tags).split(",")):
+            if tag:
+                counts.setdefault(tag, {})
+                counts[tag][cls] = counts[tag].get(cls, 0) + 1
+    return counts
+
+
 def _fill_component_stats(summary: RunSummary, table: pd.DataFrame) -> None:
     n = len(table)
     summary["n_components"] = n
     classification = (
         table["classification"].astype(str)
         if "classification" in table.columns
-        else pd.Series([], dtype=str)
+        else pd.Series("", index=table.index, dtype=str)
     )
     n_accepted = int((classification == "accepted").sum())
     n_rejected = int((classification == "rejected").sum())
@@ -157,12 +213,26 @@ def _fill_component_stats(summary: RunSummary, table: pd.DataFrame) -> None:
     summary["n_ignored"] = n_ignored
     summary["n_other"] = n - n_accepted - n_rejected - n_ignored
     summary["accepted_fraction"] = (n_accepted / n) if n else None
-    summary["variance_explained_accepted"] = _sum_varex(table, classification == "accepted")
-    summary["variance_explained_rejected"] = _sum_varex(table, classification == "rejected")
+    accepted = classification == "accepted"
+    varex_accepted = _sum_varex(table, accepted)
+    varex_rejected = _sum_varex(table, classification == "rejected")
+    summary["variance_explained_accepted"] = varex_accepted
+    summary["variance_explained_rejected"] = varex_rejected
+    summary["total_variance_explained"] = _sum_varex(table, pd.Series(True, index=table.index))
+    modeled = (
+        None
+        if varex_accepted is None or varex_rejected is None
+        else varex_accepted + varex_rejected
+    )
+    summary["rejected_variance_fraction"] = _ratio(varex_rejected, modeled)
     summary["median_kappa"] = _stat(table, "kappa", "median")
     summary["max_kappa"] = _stat(table, "kappa", "max")
     summary["median_rho"] = _stat(table, "rho", "median")
     summary["max_rho"] = _stat(table, "rho", "max")
+    summary["kappa_rho_ratio"] = _ratio(summary["median_kappa"], summary["median_rho"])
+    summary["median_dice_ft2"] = _masked_median(table, _DICE_FT2_COL, accepted)
+    summary["median_signal_noise_t"] = _masked_median(table, _SIGNAL_NOISE_T_COL, accepted)
+    summary["tag_counts"] = _tag_counts(table)
 
 
 def _find_crosscomponent(registry: dict[str, Any] | None, metrics_tsv: Path) -> Path | None:
