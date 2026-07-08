@@ -54,7 +54,7 @@ def test_registryless_run_summarizes_component_stats(derivatives: Path) -> None:
     assert summary["n_components"] == 3
     assert summary["n_accepted"] == 2
     assert summary["median_kappa"] == 58.0
-    assert summary["kappa_elbow"] is None  # no crosscomponent json without a registry
+    assert summary["kappa_elbow"] is None  # crosscomponent json is absent in this fixture
     assert summary["rho_elbow"] is None
 
 

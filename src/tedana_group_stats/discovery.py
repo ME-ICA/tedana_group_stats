@@ -74,7 +74,7 @@ def discover_runs(root: str | Path) -> list[TedanaRun]:
     Parameters
     ----------
     root : str or pathlib.Path
-        Directory searched recursively for tedana registry files.
+        Directory searched recursively for tedana metrics TSV files.
 
     Returns
     -------
