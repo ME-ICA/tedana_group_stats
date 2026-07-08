@@ -40,3 +40,9 @@ def test_group_table_flags_injected_outlier(derivatives: Path) -> None:
     assert bool(outlier_row["is_outlier"])
     failed_row = table[table["status"] != "ok"].iloc[0]
     assert not bool(failed_row["is_outlier"])  # failed != statistical outlier
+
+
+def test_new_metrics_get_outlier_columns(derivatives: Path) -> None:
+    table = build_group_table([summarize_run(r) for r in discover_runs(derivatives)])
+    for metric in ("rejected_variance_fraction", "kappa_rho_ratio"):
+        assert f"is_outlier_{metric}" in table.columns

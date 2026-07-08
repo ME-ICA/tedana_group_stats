@@ -20,6 +20,19 @@ def test_writes_html_with_table_and_chart(derivatives: Path, tmp_path: Path) -> 
     assert "tedana group stats" in html
     assert "plotly" in html.lower()
     assert "<table" in html
+    assert "rejected_variance_fraction" in html  # new table column
+    assert "Low variance" in html  # rejection-reasons chart tag
+    assert "Variance explained per run" in html  # new variance chart
+
+
+def test_large_run_count_switches_to_distributions(derivatives: Path, tmp_path: Path) -> None:
+    """Past the per-run-bar threshold, bars are replaced by scalable distributions."""
+    table = _table(derivatives)
+    big = pd.concat([table] * 10, ignore_index=True)  # 8 runs -> 80, over the 40 threshold
+    html = write_report(big, tmp_path / "big.html").read_text()
+    assert "Component count distribution" in html
+    assert "Rejected variance fraction distribution" in html
+    assert "Component counts per run" not in html  # per-run bars dropped at scale
 
 
 def test_offline_inlines_plotly(derivatives: Path, tmp_path: Path) -> None:

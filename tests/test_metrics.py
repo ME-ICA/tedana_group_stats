@@ -29,6 +29,28 @@ def test_summary_counts_and_stats(derivatives: Path) -> None:
     assert summary["kappa_elbow"] == 30.0
 
 
+def test_new_derived_metrics(derivatives: Path) -> None:
+    summary = summarize_run(_run_for(derivatives, "01", "rest"))
+    # var_exps = [20, 15, 8, 7, 6]; accepted = first two.
+    assert summary["total_variance_explained"] == 56.0
+    assert summary["rejected_variance_fraction"] == 21.0 / 56.0
+    assert summary["max_kappa"] == 80.0
+    assert summary["max_rho"] == 30.0
+    assert summary["kappa_rho_ratio"] == 25.0 / 26.0
+    # dice/signal-noise medians are taken over accepted components only.
+    assert summary["median_dice_ft2"] == 0.6
+    assert summary["median_signal_noise_t"] == 8.0
+
+
+def test_tag_counts_split_by_classification(derivatives: Path) -> None:
+    summary = summarize_run(_run_for(derivatives, "01", "rest"))
+    tags = summary["tag_counts"]
+    assert tags is not None
+    assert tags["Likely BOLD"] == {"accepted": 2}
+    assert tags["Unlikely BOLD"] == {"rejected": 3}
+    assert tags["Low variance"] == {"rejected": 3}
+
+
 def test_broken_run_degrades_without_raising(derivatives: Path) -> None:
     summary = summarize_run(_run_for(derivatives, "04"))
     assert summary["status"] == "failed"
