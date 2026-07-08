@@ -198,7 +198,8 @@ def _bar_variance(df: pd.DataFrame) -> go.Figure:
 
 def _histogram(df: pd.DataFrame, column: str, title: str, xaxis_title: str) -> go.Figure:
     """Distribution of one per-run metric — scales to any run count, unlike per-run bars."""
-    values = cast("pd.Series", pd.to_numeric(df[column], errors="coerce")).dropna()
+    series = df[column] if column in df.columns else pd.Series(dtype=float)
+    values = cast("pd.Series", pd.to_numeric(series, errors="coerce")).dropna()
     fig = go.Figure(go.Histogram(x=values, marker_color=_CATEGORY_COLORS["ok"]))
     fig.update_layout(
         title=title,

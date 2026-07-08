@@ -51,6 +51,27 @@ def test_tag_counts_split_by_classification(derivatives: Path) -> None:
     assert tags["Low variance"] == {"rejected": 3}
 
 
+def test_tsv_without_classification_column_does_not_raise(tmp_path: Path) -> None:
+    """A metrics tsv with rows but no ``classification`` column must not raise.
+
+    Without an aligned fallback, the empty classification Series makes an unalignable
+    boolean indexer and pandas raises inside ``_sum_varex`` — breaking the "never raises"
+    contract for a run that is merely missing a column.
+    """
+    func = tmp_path / "sub-08" / "func"
+    func.mkdir(parents=True)
+    pd.DataFrame(
+        {"kappa": [80.0, 25.0], "rho": [10.0, 30.0], "variance explained": [20.0, 8.0]}
+    ).to_csv(func / "sub-08_desc-tedana_metrics.tsv", sep="\t", index=False)
+
+    summary = summarize_run(_run_for(tmp_path, "08"))
+    assert summary["status"] == "ok"
+    assert summary["n_components"] == 2
+    assert summary["n_accepted"] == 0
+    assert summary["variance_explained_accepted"] == 0.0
+    assert summary["total_variance_explained"] == 28.0
+
+
 def test_broken_run_degrades_without_raising(derivatives: Path) -> None:
     summary = summarize_run(_run_for(derivatives, "04"))
     assert summary["status"] == "failed"
