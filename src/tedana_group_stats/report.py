@@ -33,6 +33,7 @@ _TABLE_COLUMNS = [
     "n_rejected",
     "accepted_fraction",
     "variance_explained_accepted",
+    "variance_explained_rejected",
     "median_kappa",
     "median_rho",
     "kappa_elbow",

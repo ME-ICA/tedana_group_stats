@@ -5,8 +5,15 @@ from pathlib import Path
 from tedana_group_stats.discovery import discover_runs
 
 
-def test_finds_all_registries(derivatives: Path) -> None:
-    assert len(discover_runs(derivatives)) == 8
+def test_finds_all_runs(derivatives: Path) -> None:
+    assert len(discover_runs(derivatives)) == 9
+
+
+def test_finds_registryless_run(derivatives: Path) -> None:
+    sub06 = [run for run in discover_runs(derivatives) if run.subject == "06"]
+    assert len(sub06) == 1
+    assert sub06[0].registry is None  # discovered by its metrics tsv alone
+    assert sub06[0].metrics_tsv.name.endswith("desc-tedana_metrics.tsv")
 
 
 def test_parses_bids_entities(derivatives: Path) -> None:

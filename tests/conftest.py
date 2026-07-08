@@ -18,6 +18,7 @@ def _write_run(
     var_exps: list[float],
     *,
     crosscomp: bool = True,
+    registry: bool = True,
     break_tsv: bool = False,
 ) -> Path:
     func_dir.mkdir(parents=True, exist_ok=True)
@@ -26,12 +27,7 @@ def _write_run(
     cross_name = f"{pfx}desc-ICACrossComponent_metrics.json"
     registry_name = f"{pfx}desc-tedana_registry.json"
 
-    registry: dict[str, str] = {
-        "ICA metrics tsv": metrics_name,
-        "registry json": registry_name,
-    }
     if crosscomp:
-        registry["ICA cross component metrics json"] = cross_name
         (func_dir / cross_name).write_text(
             json.dumps(
                 {
@@ -42,8 +38,12 @@ def _write_run(
             )
         )
 
-    if not break_tsv:
-        table = pd.DataFrame(
+    metrics_path = func_dir / metrics_name
+    if break_tsv:
+        # Present but unparseable: discovered by its name, fails on read (empty file).
+        metrics_path.write_text("")
+    else:
+        pd.DataFrame(
             {
                 "Component": [f"ICA_{i:03d}" for i in range(len(classifications))],
                 "kappa": kappas,
@@ -52,12 +52,17 @@ def _write_run(
                 "classification": classifications,
                 "classification_tags": ["" for _ in classifications],
             }
-        )
-        table.to_csv(func_dir / metrics_name, sep="\t", index=False)
+        ).to_csv(metrics_path, sep="\t", index=False)
 
-    registry_path = func_dir / registry_name
-    registry_path.write_text(json.dumps(registry))
-    return registry_path
+    if registry:
+        payload: dict[str, str] = {
+            "ICA metrics tsv": metrics_name,
+            "registry json": registry_name,
+        }
+        if crosscomp:
+            payload["ICA cross component metrics json"] = cross_name
+        (func_dir / registry_name).write_text(json.dumps(payload))
+    return metrics_path
 
 
 @pytest.fixture(scope="session")
@@ -127,6 +132,18 @@ def derivatives(tmp_path_factory: pytest.TempPathFactory) -> Path:
         rhos=[12.0, 30.0, 28.0],
         var_exps=[14.0, 8.0, 7.0],
         crosscomp=False,
+    )
+
+    # A registry-less run: only a metrics tsv on disk (older/minimal tedana output).
+    _write_run(
+        root / "sub-06" / "ses-01" / "func",
+        "sub-06_ses-01_task-rest",
+        classifications=["accepted", "accepted", "rejected"],
+        kappas=[75.0, 58.0, 21.0],
+        rhos=[11.0, 13.0, 31.0],
+        var_exps=[19.0, 15.0, 8.0],
+        crosscomp=False,
+        registry=False,
     )
 
     return root
