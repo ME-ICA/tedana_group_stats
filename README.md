@@ -1,5 +1,8 @@
 # tedana_group_stats
 
+[![CI](https://github.com/ME-ICA/tedana_group_stats/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ME-ICA/tedana_group_stats/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ME-ICA/tedana_group_stats/branch/main/graph/badge.svg)](https://codecov.io/gh/ME-ICA/tedana_group_stats)
+
 Aggregate [tedana](https://github.com/ME-ICA/tedana) multi-echo fMRI outputs across a
 BIDS-derivatives tree into a single, self-contained interactive QC report — so you can
 spot group trends and outlier runs without opening every report by hand.

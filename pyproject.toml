@@ -73,7 +73,7 @@ reportMissingTypeStubs = false  # pandas/plotly stubs are partial; don't fight i
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers --cov=tedana_group_stats --cov-report=term-missing --cov-fail-under=95"
+addopts = "-ra --strict-markers --cov=tedana_group_stats --cov-report=term-missing --cov-report=xml --cov-fail-under=95"
 
 [tool.coverage.run]
 source = ["tedana_group_stats"]

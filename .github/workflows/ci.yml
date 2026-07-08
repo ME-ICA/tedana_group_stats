@@ -17,3 +17,7 @@ jobs:
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync pyright
       - run: uv run --no-sync pytest -q
+      - uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
